@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kingmotion"
+version = "0.1.0"
+description = "A UCI chess engine written in pure Python"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+
+[project.scripts]
+kingmotion = "kingmotion.__main__:main"
+
+[tool.setuptools]
+packages = ["kingmotion"]
