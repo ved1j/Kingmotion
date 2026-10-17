@@ -1,5 +1,7 @@
 # Kingmotion ♚
 
+[![tests](https://github.com/ved1j/Kingmotion/actions/workflows/tests.yml/badge.svg)](https://github.com/ved1j/Kingmotion/actions/workflows/tests.yml)
+
 A UCI chess engine written in pure Python — no dependencies, readable code.
 
 ## Features
@@ -13,7 +15,8 @@ A UCI chess engine written in pure Python — no dependencies, readable code.
 **Search**
 - Iterative deepening negamax with principal variation search (PVS)
 - Transposition table with mate-score adjustment
-- Quiescence search with delta pruning
+- Aspiration windows
+- Quiescence search with delta pruning and check evasions
 - Null-move pruning, reverse futility pruning, late move reductions
 - Check extensions and mate-distance pruning
 - Move ordering: TT move → MVV-LVA captures → promotions → killers → history
@@ -29,7 +32,7 @@ A UCI chess engine written in pure Python — no dependencies, readable code.
 Requires Python 3.9+.
 
 ```bash
-python3 -m kingmotion play                 # play as white, 2s per engine move
+python3 -m kingmotion play                 # play as white, 2s per engine move (SAN or UCI input)
 python3 -m kingmotion play --color black --time 5
 python3 -m kingmotion                      # UCI mode (for chess GUIs)
 python3 -m kingmotion perft 5              # move generator check
@@ -49,7 +52,7 @@ Add Kingmotion as a UCI engine in [Cute Chess](https://cutechess.com/),
 with the command `python3 -m kingmotion` and the repository folder as the
 working directory (or just `kingmotion` after `pip install`).
 
-Supported UCI commands: `uci`, `isready`, `ucinewgame`, `setoption name Hash`,
+Supported UCI commands: `uci`, `isready`, `ucinewgame`, `setoption` (`Hash`, `Clear Hash`),
 `position [startpos | fen …] moves …`, `go` (`wtime btime winc binc movestogo
 depth nodes movetime infinite`), `stop`, `quit`, plus `d` (show board) and
 `perft N`.
@@ -75,7 +78,7 @@ tests/          perft, search and UCI tests
 
 ## Ideas for next steps
 
-- Aspiration windows and static exchange evaluation (SEE)
+- Static exchange evaluation (SEE)
 - King safety and mobility terms in the evaluation
 - An opening book
 - Port the hot loops to a faster language, or use PyPy for a ~5× speedup

@@ -306,6 +306,51 @@ class Board:
                 return m
         return None
 
+    def san(self, m, legal=None):
+        """Standard algebraic notation for a legal move, e.g. 'Nbd7', 'exd6+'."""
+        b = self.sq
+        frm, to, promo, flag = m & 127, (m >> 7) & 127, (m >> 14) & 7, m >> 17
+        kind = abs(b[frm])
+        if flag == CASTLE:
+            text = "O-O" if to > frm else "O-O-O"
+        else:
+            capture = b[to] != EMPTY or flag == EN_PASSANT
+            if kind == PAWN:
+                text = ("abcdefgh"[file_of(frm)] + "x" if capture else "") + square_name(to)
+                if promo:
+                    text += "=" + " PNBRQK"[promo]
+            else:
+                text = " PNBRQK"[kind]
+                if legal is None:
+                    legal = self.legal_moves()
+                rivals = [move_from(o) for o in legal
+                          if o != m and move_to(o) == to and abs(b[move_from(o)]) == kind]
+                if rivals:
+                    if all(file_of(r) != file_of(frm) for r in rivals):
+                        text += "abcdefgh"[file_of(frm)]
+                    elif all(rank_of(r) != rank_of(frm) for r in rivals):
+                        text += str(rank_of(frm) + 1)
+                    else:
+                        text += square_name(frm)
+                text += ("x" if capture else "") + square_name(to)
+        self.make(m)
+        if self.in_check():
+            text += "#" if not self.legal_moves() else "+"
+        self.unmake()
+        return text
+
+    def parse_move(self, text):
+        """Accept a move in UCI ('g1f3') or SAN ('Nf3', 'O-O', 'exd5')."""
+        move = self.parse_uci(text)
+        if move is not None:
+            return move
+        wanted = text.strip().rstrip("+#!?").replace("0", "O")
+        legal = self.legal_moves()
+        for m in legal:
+            if self.san(m, legal).rstrip("+#") == wanted:
+                return m
+        return None
+
     # ------------------------------------------------------------ make/unmake
 
     def make(self, m):

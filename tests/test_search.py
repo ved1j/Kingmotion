@@ -4,7 +4,7 @@ import unittest
 
 from kingmotion.board import Board, move_to_uci
 from kingmotion.evaluate import evaluate
-from kingmotion.search import Searcher, MATE_BOUND
+from kingmotion.search import Searcher, MATE, MATE_BOUND, tt_entries_for
 from kingmotion.uci import UCI
 
 
@@ -43,6 +43,17 @@ class SearchTest(unittest.TestCase):
         black = Board("rnbqk2r/pppp1ppp/5n2/2b1p3/4P3/2N5/PPPP1PPP/R1BQKBNR b KQkq - 0 1")
         self.assertEqual(evaluate(white), evaluate(black))
 
+    def test_quiescence_sees_checkmate(self):
+        # White to move is checkmated; quiescence must not "stand pat" here.
+        board = Board("rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3")
+        score = Searcher()._quiesce(board, -MATE, MATE, 0)
+        self.assertLessEqual(score, -MATE_BOUND)
+
+    def test_tactics_with_aspiration_windows(self):
+        # Deep enough that aspiration windows kick in; must still win the queen.
+        move, _ = best("4k3/8/8/3q4/8/8/3R4/4K3 w - - 0 1", depth=6)
+        self.assertEqual(move, "d2d5")
+
 
 class UCITest(unittest.TestCase):
     def test_go_depth_returns_bestmove(self):
@@ -52,6 +63,14 @@ class UCITest(unittest.TestCase):
         uci.handle("go depth 3")
         uci.thread.join()
         self.assertIn("bestmove ", out.getvalue())
+
+    def test_hash_option(self):
+        uci = UCI(out=io.StringIO())
+        uci.handle("setoption name Hash value 16")
+        self.assertEqual(uci.searcher.tt_max, tt_entries_for(16))
+        uci.searcher.tt[1] = (1, 0, 0, 0)
+        uci.handle("setoption name Clear Hash")
+        self.assertEqual(uci.searcher.tt, {})
 
 
 if __name__ == "__main__":

@@ -26,12 +26,25 @@ def score_to_uci(score):
     return f"cp {score}"
 
 
+DEFAULT_HASH_MB = 64
+TT_ENTRY_BYTES = 200  # rough size of one Python dict entry with its tuple
+
+
+def tt_entries_for(megabytes):
+    return megabytes * 1024 * 1024 // TT_ENTRY_BYTES
+
+
 class Searcher:
-    def __init__(self, tt_entries=2_000_000):
+    def __init__(self, hash_mb=DEFAULT_HASH_MB):
         self.tt = {}
-        self.tt_max = tt_entries
+        self.tt_max = tt_entries_for(hash_mb)
         self.stop = False
         self.history = [[0] * 120 for _ in range(13)]
+        self.killers = [[0, 0] for _ in range(MAX_PLY + 1)]
+        self.nodes = 0
+        self.deadline = None
+        self.max_nodes = None
+        self.root_best = 0
 
     def new_game(self):
         self.tt.clear()
@@ -68,7 +81,7 @@ class Searcher:
         max_depth = min(max_depth or MAX_PLY - 1, MAX_PLY - 1)
         best_move, best_score = legal[0], 0
         for depth in range(1, max_depth + 1):
-            score = self._negamax(board, depth, -INF, INF, 0, True)
+            score = self._aspiration(board, depth, best_score)
             if self.stop:
                 # A partial iteration still searched the previous best
                 # move first, so any newer root_best is a real improvement.
@@ -84,6 +97,31 @@ class Searcher:
             if abs(score) >= MATE_BOUND and depth >= MATE - abs(score):
                 break  # found the shortest mate
         return best_move, best_score
+
+    def _aspiration(self, board, depth, guess):
+        """Search with a narrow window around the previous score, widening
+        it on failure. Narrow windows cut more of the tree."""
+        if depth < 4 or abs(guess) >= MATE_BOUND:
+            return self._negamax(board, depth, -INF, INF, 0, True)
+        delta = 40
+        alpha, beta = guess - delta, guess + delta
+        safe_best = self.root_best
+        while True:
+            score = self._negamax(board, depth, alpha, beta, 0, True)
+            if self.stop:
+                return score
+            if score <= alpha:
+                # Fail-low: every move looked bad, so root_best is just
+                # whichever lost least against a wrong bound. Keep the old one.
+                self.root_best = safe_best
+                alpha = max(score - delta, -INF)
+            elif score >= beta:
+                beta = min(score + delta, INF)
+            else:
+                return score
+            delta *= 2
+            if delta > 1000:
+                alpha, beta = -INF, INF
 
     def _check_limits(self):
         if self.deadline and time.monotonic() >= self.deadline:
@@ -210,24 +248,38 @@ class Searcher:
         if self.stop:
             return 0
 
-        stand_pat = evaluate(board)
-        if ply >= MAX_PLY or stand_pat >= beta:
-            return stand_pat
-        if stand_pat > alpha:
-            alpha = stand_pat
+        if ply >= MAX_PLY:
+            return evaluate(board)
+
+        # In check, standing pat is not an option: every evasion must be
+        # searched, and having none means we are mated.
+        in_check = board.in_check()
+        if in_check:
+            stand_pat = -INF
+            moves = board.gen_moves()
+        else:
+            stand_pat = evaluate(board)
+            if stand_pat >= beta:
+                return stand_pat
+            if stand_pat > alpha:
+                alpha = stand_pat
+            moves = board.gen_moves(captures_only=True)
 
         us = board.side
         sq = board.sq
-        for m in self._order(board, board.gen_moves(captures_only=True), 0, ply):
-            victim = sq[(m >> 7) & 127]
-            gain = PIECE_VALUES[abs(victim)] if victim else 100
-            # Delta pruning: even winning this piece can't lift us to alpha.
-            if stand_pat + gain + 200 < alpha and not (m >> 14) & 7:
-                continue
+        legal = 0
+        for m in self._order(board, moves, 0, ply):
+            if not in_check:
+                victim = sq[(m >> 7) & 127]
+                gain = PIECE_VALUES[abs(victim)] if victim else 100
+                # Delta pruning: even winning this piece can't lift us to alpha.
+                if stand_pat + gain + 200 < alpha and not (m >> 14) & 7:
+                    continue
             board.make(m)
             if board.is_attacked(board.king[us], -us):
                 board.unmake()
                 continue
+            legal += 1
             score = -self._quiesce(board, -beta, -alpha, ply + 1)
             board.unmake()
             if self.stop:
@@ -236,6 +288,8 @@ class Searcher:
                 alpha = score
                 if alpha >= beta:
                     break
+        if in_check and not legal:
+            return -MATE + ply
         return alpha
 
     # ---------------------------------------------------------------- helpers

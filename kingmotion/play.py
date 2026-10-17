@@ -1,9 +1,10 @@
 """Play Kingmotion in the terminal."""
 
-from .board import Board, START_FEN, WHITE, move_to_uci
+from .board import Board, START_FEN, WHITE
 from .search import Searcher, score_to_uci
 
-HELP = """Enter moves in UCI form (e2e4, e7e8q). Other commands:
+HELP = """Enter moves in SAN (Nf3, exd5, O-O, e8=Q) or UCI (g1f3). Other commands:
+  moves  list your legal moves
   undo   take back your last move
   fen    print the current position as FEN
   hint   ask the engine for a suggestion
@@ -25,7 +26,7 @@ def play(human_color=WHITE, think_time=2.0, fen=START_FEN):
         if board.side != human_color:
             print("Kingmotion is thinking...")
             move, score = searcher.search(board, soft_time=think_time, hard_time=think_time * 2)
-            print(f"Kingmotion plays {move_to_uci(move)}  (eval {score_to_uci(score)})\n")
+            print(f"Kingmotion plays {board.san(move)}  (eval {score_to_uci(score)})\n")
             board.make(move)
             continue
 
@@ -38,6 +39,9 @@ def play(human_color=WHITE, think_time=2.0, fen=START_FEN):
             return
         if text == "help":
             print(HELP, "\n")
+        elif text == "moves":
+            legal = board.legal_moves()
+            print(" ".join(sorted(board.san(m, legal) for m in legal)), "\n")
         elif text == "fen":
             print(board.fen(), "\n")
         elif text == "undo":
@@ -48,9 +52,9 @@ def play(human_color=WHITE, think_time=2.0, fen=START_FEN):
                 print("Nothing to undo.\n")
         elif text == "hint":
             move, _ = searcher.search(board, soft_time=think_time / 2, hard_time=think_time)
-            print(f"Try {move_to_uci(move)}\n")
+            print(f"Try {board.san(move)}\n")
         else:
-            move = board.parse_uci(text)
+            move = board.parse_move(text)
             if move is None:
                 print(f"'{text}' is not a legal move. Type 'help' for help.\n")
             else:

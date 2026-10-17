@@ -7,7 +7,7 @@ import time
 
 from . import __version__
 from .board import Board, START_FEN, WHITE, move_to_uci, perft
-from .search import Searcher, score_to_uci, format_pv
+from .search import Searcher, score_to_uci, format_pv, tt_entries_for, DEFAULT_HASH_MB
 
 MOVE_OVERHEAD = 0.05  # seconds kept in reserve for GUI/IO latency
 
@@ -54,7 +54,8 @@ class UCI:
         if cmd == "uci":
             self.send(f"id name Kingmotion {__version__}")
             self.send("id author Kingmotion contributors")
-            self.send("option name Hash type spin default 64 min 1 max 1024")
+            self.send(f"option name Hash type spin default {DEFAULT_HASH_MB} min 1 max 1024")
+            self.send("option name Clear Hash type button")
             self.send("uciok")
         elif cmd == "isready":
             self.send("readyok")
@@ -82,12 +83,18 @@ class UCI:
         return True
 
     def _setoption(self, tokens):
-        if "name" in tokens and "value" in tokens:
-            name = " ".join(tokens[tokens.index("name") + 1:tokens.index("value")]).lower()
-            value = tokens[tokens.index("value") + 1]
-            if name == "hash":
-                # Roughly 200 bytes per Python dict entry.
-                self.searcher.tt_max = int(value) * 1024 * 1024 // 200
+        if "name" not in tokens:
+            return
+        end = tokens.index("value") if "value" in tokens else len(tokens)
+        name = " ".join(tokens[tokens.index("name") + 1:end]).lower()
+        value = tokens[end + 1] if end + 1 < len(tokens) else None
+        if name == "hash" and value and value.isdigit():
+            self.stop_search()
+            self.searcher.tt_max = tt_entries_for(max(1, min(1024, int(value))))
+            self.searcher.tt.clear()
+        elif name == "clear hash":
+            self.stop_search()
+            self.searcher.new_game()
 
     def _position(self, tokens):
         moves_at = tokens.index("moves") if "moves" in tokens else len(tokens)

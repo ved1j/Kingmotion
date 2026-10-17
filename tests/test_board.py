@@ -52,5 +52,34 @@ class BoardTest(unittest.TestCase):
         self.assertEqual(promos, ["a7a8b", "a7a8n", "a7a8q", "a7a8r"])
 
 
+class SanTest(unittest.TestCase):
+    def test_san_output(self):
+        board = Board("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")
+        legal = board.legal_moves()
+        sans = {board.san(m, legal) for m in legal}
+        for expected in ["O-O", "O-O-O", "dxe6", "Nxf7", "Qxf6", "Bxa6", "Ng4", "Rb1", "Rf1"]:
+            self.assertIn(expected, sans)
+
+    def test_san_disambiguation_and_check(self):
+        board = Board("4k3/8/8/8/8/6K1/8/R6R w - - 0 1")
+        self.assertEqual(board.san(board.parse_uci("a1d1")), "Rad1")
+        self.assertEqual(board.san(board.parse_uci("h1h8")), "Rh8+")
+        mate = Board("6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1")
+        self.assertEqual(mate.san(mate.parse_uci("d1d8")), "Rd8#")
+
+    def test_promotion_san(self):
+        board = Board("8/P6k/8/8/8/8/8/K7 w - - 0 1")
+        self.assertEqual(board.san(board.parse_uci("a7a8q")), "a8=Q")
+
+    def test_parse_move_accepts_san_and_uci(self):
+        board = Board()
+        self.assertEqual(board.parse_move("Nf3"), board.parse_uci("g1f3"))
+        self.assertEqual(board.parse_move("e4"), board.parse_uci("e2e4"))
+        self.assertEqual(board.parse_move("e2e4"), board.parse_uci("e2e4"))
+        self.assertIsNone(board.parse_move("Ke2"))
+        castle = Board("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1")
+        self.assertEqual(castle.parse_move("0-0"), castle.parse_uci("e1g1"))
+
+
 if __name__ == "__main__":
     unittest.main()
